@@ -1,0 +1,25 @@
+Chạy Chương Trình
+🔹 Bước 1: Đăng ký khuôn mặt
+bash
+Sao chép
+Chỉnh sửa
+python src/register_faces.py
+📌 Hệ thống sẽ lưu vector khuôn mặt vào face_embeddings.npz.
+
+🔹 Bước 2: Nhận diện khuôn mặt
+bash
+Sao chép
+Chỉnh sửa
+python src/recognize.py
+📌 Nếu ảnh test khớp với người đã đăng ký, nó sẽ in:
+
+bash
+Sao chép
+Chỉnh sửa
+✅ Nhận diện: user1
+📌 Nếu không khớp, nó sẽ báo:
+
+bash
+Sao chép
+Chỉnh sửa
+🚫 Khuôn mặt không khớp
