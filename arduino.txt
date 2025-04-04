@@ -1,0 +1,205 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <Keypad.h>
+#include <Servo.h>
+#include <Adafruit_Fingerprint.h>
+
+// Khai báo các chân và đối tượng
+#define PASSWORD_LENGTH 7 // 6 số + ký tự null
+const char defaultPassword[] = "123456"; 
+char currentPassword[PASSWORD_LENGTH];
+
+Servo myServo;
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+SoftwareSerial mySerial(11, 12); // TX 11, RX 12
+Adafruit_Fingerprint finger = Adafruit_Fingerprint(&mySerial);
+
+const byte ROWS = 4;
+const byte COLS = 4;
+char keys[ROWS][COLS] = {
+  {'1','2','3','A'},
+  {'4','5','6','B'},
+  {'7','8','9','C'},
+  {'*','0','#','D'}
+};
+byte rowPins[ROWS] = {9, 8, 7, 6};
+byte colPins[COLS] = {5, 4, 3, 2};
+Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
+
+int fingerprintAttempts = 0;
+int passwordAttempts = 0;
+
+void setup() {
+  Serial.begin(9600);
+  mySerial.begin(57600);
+  lcd.begin();
+  lcd.backlight();
+  myServo.attach(10);
+  myServo.write(0);
+  finger.begin(57600);
+  strcpy(currentPassword, defaultPassword);
+  lcd.setCursor(0, 0);
+  lcd.print("He thong khoa");
+}
+
+void loop() {
+  lcd.setCursor(0, 1);
+  lcd.print("Nhap lenh:     ");
+  char key = keypad.getKey();
+  if (key) {
+    if (key == 'A') addFingerprint();
+    else if (key == 'B') deleteFingerprint();
+    else if (key == 'C') changePassword();
+    else checkFingerprint();
+  }
+}
+
+bool verifyPassword() {
+  char input[PASSWORD_LENGTH] = "";
+  lcd.setCursor(0, 1);
+  lcd.print("Nhap mat khau:");
+  for (int i = 0; i < 6; i++) {
+    char key;
+    do { key = keypad.getKey(); } while (!key);
+    input[i] = key;
+    lcd.setCursor(i + 6, 1);
+    lcd.print("*");
+  }
+  input[6] = '\0';
+  if (strcmp(input, currentPassword) == 0) {
+    passwordAttempts = 0;
+    return true;
+  }
+  passwordAttempts++;
+  if (passwordAttempts >= 3) {
+    Serial.println("Da thong bao cho chu!");
+  }
+  return false;
+}
+
+void addFingerprint() {
+  if (!verifyPassword()) {
+    lcd.clear();
+    lcd.print("Sai mat khau!");
+    delay(2000);
+    return;
+  }
+  lcd.clear();
+  lcd.print("Nhap ID: ");
+  int id = getNumberInput();
+  lcd.clear();
+  lcd.print("Dang them...");
+  if (enrollFingerprint(id)) {
+    lcd.clear();
+    lcd.print("Them thanh cong!");
+  } else {
+    lcd.clear();
+    lcd.print("Them that bai!");
+  }
+  delay(2000);
+}
+
+void deleteFingerprint() {
+  if (!verifyPassword()) {
+    lcd.clear();
+    lcd.print("Sai mat khau!");
+    delay(2000);
+    return;
+  }
+  lcd.clear();
+  lcd.print("Nhap ID xoa:");
+  int id = getNumberInput();
+  lcd.clear();
+  lcd.print("Dang xoa...");
+  if (finger.deleteModel(id) == FINGERPRINT_OK) {
+    lcd.clear();
+    lcd.print("Xoa thanh cong!");
+  } else {
+    lcd.clear();
+    lcd.print("Xoa that bai!");
+  }
+  delay(2000);
+}
+
+void changePassword() {
+  if (!verifyPassword()) {
+    lcd.clear();
+    lcd.print("Sai mat khau!");
+    delay(2000);
+    return;
+  }
+  lcd.clear();
+  lcd.print("Nhap moi:");
+  for (int i = 0; i < 6; i++) {
+    char key;
+    do { key = keypad.getKey(); } while (!key);
+    currentPassword[i] = key;
+    lcd.setCursor(i + 6, 1);
+    lcd.print("*");
+  }
+  currentPassword[6] = '\0';
+  lcd.clear();
+  lcd.print("Doi thanh cong!");
+  delay(2000);
+}
+
+void checkFingerprint() {
+  lcd.clear();
+  lcd.print("Quet van tay...");
+  int id = getFingerprintID();
+  if (id >= 0) {
+    fingerprintAttempts = 0;
+    lcd.clear();
+    lcd.print("Mo khoa!");
+    myServo.write(90);
+    delay(10000);
+    myServo.write(0);
+    lcd.clear();
+  } else {
+    fingerprintAttempts++;
+    if (fingerprintAttempts >= 5) {
+      Serial.println("Da thong bao cho chu!");
+    }
+    lcd.clear();
+    lcd.print("Khong hop le!");
+  }
+  delay(2000);
+}
+
+int getFingerprintID() {
+  if (finger.getImage() != FINGERPRINT_OK) return -1;
+  if (finger.image2Tz() != FINGERPRINT_OK) return -1;
+  if (finger.fingerFastSearch() != FINGERPRINT_OK) return -1;
+  return finger.fingerID;
+}
+
+bool enrollFingerprint(int id) {
+  lcd.clear();
+  lcd.print("Dat tay len...");
+  while (finger.getImage() != FINGERPRINT_OK);
+  if (finger.image2Tz(1) != FINGERPRINT_OK) return false;
+  lcd.clear();
+  lcd.print("Nhat tay ra...");
+  delay(2000);
+  while (finger.getImage() == FINGERPRINT_OK);
+  lcd.clear();
+  lcd.print("Quet lai...");
+  while (finger.getImage() != FINGERPRINT_OK);
+  if (finger.image2Tz(2) != FINGERPRINT_OK) return false;
+  if (finger.createModel() != FINGERPRINT_OK) return false;
+  if (finger.storeModel(id) != FINGERPRINT_OK) return false;
+  return true;
+}
+
+int getNumberInput() {
+  int num = 0;
+  char key;
+  do {
+    key = keypad.getKey();
+    if (key >= '0' && key <= '9') {
+      num = num * 10 + (key - '0');
+      lcd.print(key);
+    }
+  } while (key != '#');
+  return num;
+}
